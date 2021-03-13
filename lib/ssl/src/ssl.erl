@@ -400,6 +400,8 @@
 -type middlebox_comp_mode()      :: boolean().
 -type client_early_data()        :: binary().
 -type server_early_data()        :: disabled | enabled.
+-type use_srtp_protection_profiles() :: [binary()].
+-type use_srtp_mki()             :: binary().
 -type spawn_opts()               :: [erlang:spawn_opt_option()].
 
 %% -------------------------------------------------------------------------------------------------------
@@ -421,7 +423,9 @@
                                 {certificate_authorities, client_certificate_authorities()} |
                                 {session_tickets, client_session_tickets()} |
                                 {use_ticket, use_ticket()} |
-                                {early_data, client_early_data()}.
+                                {early_data, client_early_data()} |
+                                {use_srtp_protection_profiles, use_srtp_protection_profiles()} |
+                                {use_srtp_mki, use_srtp_mki()}.
                                 %% {ocsp_stapling, ocsp_stapling()} |
                                 %% {ocsp_responder_certs, ocsp_responder_certs()} |
                                 %% {ocsp_nonce, ocsp_nonce()}.
@@ -472,7 +476,9 @@
                                 {session_tickets, server_session_tickets()} |
                                 {anti_replay, anti_replay()} |
                                 {cookie, cookie()} |
-                                {early_data, server_early_data()}.
+                                {early_data, server_early_data()} |
+                                {use_srtp_protection_profiles, use_srtp_protection_profiles()} |
+                                {use_srtp_mki, use_srtp_mki()}.
 
 -type server_cacerts()           :: [public_key:der_encoded()] | [public_key:combined_cert()].
 -type server_cafile()            :: file:filename().
@@ -1874,6 +1880,18 @@ handle_option(supported_groups = Option, Value0,
     assert_option_dependency(Option, versions, Versions, ['tlsv1.3']),
     Value = handle_supported_groups_option(Value0, HighestVersion),
     OptionsMap#{Option => Value};
+handle_option(use_srtp_protection_profiles = Option, unbound, OptionsMap, #{rules := Rules}) ->
+    Value = default_value(Option, Rules),
+    OptionsMap#{Option => Value};
+handle_option(use_srtp_protection_profiles = Option, Value0, OptionsMap, _Env) ->
+    Value = validate_option(Option, Value0),
+    OptionsMap#{Option => Value};
+handle_option(use_srtp_mki = Option, unbound, OptionsMap, #{rules := Rules}) ->
+    Value = default_value(Option, Rules),
+    OptionsMap#{Option => Value};
+handle_option(use_srtp_mki = Option, Value0, OptionsMap, _Env) ->
+    Value = validate_option(Option, Value0),
+    OptionsMap#{Option => Value};
 handle_option(use_ticket = Option, unbound, OptionsMap, #{rules := Rules}) ->
     Value = validate_option(Option, default_value(Option, Rules)),
     OptionsMap#{Option => Value};
@@ -2423,6 +2441,17 @@ validate_option(user_lookup_fun, undefined, _) ->
 validate_option(user_lookup_fun, {Fun, _} = Value, _)
   when is_function(Fun, 3) ->
    Value;
+validate_option(use_srtp_protection_profiles = Opt, Values, _) when is_list(Values), length(Values) > 0 ->
+    IsValidProfile = fun(<<_, _>>) -> true; (_) -> false end,
+    case lists:all(IsValidProfile, Values) of
+        true ->
+            Values;
+        false ->
+            throw({error, {options, {Opt, Values}}})
+    end;
+validate_option(use_srtp_mki, Value, _)
+  when is_binary(Value) ->
+    Value;
 validate_option(use_ticket, Value, _)
   when is_list(Value) ->
     Value;
