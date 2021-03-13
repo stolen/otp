@@ -702,6 +702,15 @@ encode_extensions([#sni{hostname = Hostname} | Rest], Acc) ->
                               ?BYTE(?SNI_NAMETYPE_HOST_NAME),
                               ?UINT16(HostLen), HostnameBin/binary,
                               Acc/binary>>);
+encode_extensions([#use_srtp{protection_profiles = Profiles, mki = MKI} | Rest], Acc) ->
+    ProfilesBin = iolist_to_binary(Profiles),
+    ProfilesLength = byte_size(ProfilesBin),
+    MKILength = byte_size(MKI),
+    ExtLength = ProfilesLength + 2 + MKILength + 1,
+    encode_extensions(Rest, <<?UINT16(?USE_SRTP_EXT), ?UINT16(ExtLength),
+                              ?UINT16(ProfilesLength), ProfilesBin/binary,
+                              ?BYTE(MKILength), MKI/binary,
+                              Acc/binary>>);
 encode_extensions([#max_frag_enum{enum = MaxFragEnum} | Rest], Acc) ->
     ExtLength = 1,
     encode_extensions(Rest, <<?UINT16(?MAX_FRAGMENT_LENGTH_EXT), ?UINT16(ExtLength), ?BYTE(MaxFragEnum),
@@ -1172,6 +1181,7 @@ add_tls12_extensions(_Version,
           encode_client_protocol_negotiation(NextProtocolSelector,
                                              Renegotiation),
       sni => sni(ServerNameIndication),
+      use_srtp => use_srtp_ext(SslOpts),
       max_frag_enum => max_frag_enum(MaxFragmentLength)
      }.
 
@@ -1377,6 +1387,12 @@ signature_algs_cert(undefined) ->
     undefined;
 signature_algs_cert(SignatureSchemes) ->
     #signature_algorithms_cert{signature_scheme_list = SignatureSchemes}.
+
+
+use_srtp_ext(#{srtp_profiles := [_|_] = Profiles}) ->
+    #use_srtp{protection_profiles = Profiles, mki = <<>>};
+use_srtp_ext(#{}) ->
+    undefined.
 
 handle_client_hello_extensions(RecordCB, Random, ClientCipherSuites,
                                Exts, Version,
@@ -2678,6 +2694,16 @@ decode_extensions(<<?UINT16(?SIGNATURE_ALGORITHMS_CERT_EXT), ?UINT16(Len),
                       Acc#{signature_algs_cert =>
                                #signature_algorithms_cert{
                                   signature_scheme_list = SignSchemes}});
+
+decode_extensions(<<?UINT16(?USE_SRTP_EXT), ?UINT16(Len),
+		       ExtData:Len/binary, Rest/binary>>, Version, MessageType, Acc) ->
+    <<?UINT16(ProfilesLen), ProfilesBin:ProfilesLen/binary, ?BYTE(MKILen), MKI:MKILen/binary>> = ExtData,
+    Profiles = [P || <<P:2/binary>> <= ProfilesBin],
+    decode_extensions(Rest, Version, MessageType,
+                      Acc#{use_srtp =>
+                              #use_srtp{
+                                 protection_profiles = Profiles,
+                                 mki=MKI}});
 
 decode_extensions(<<?UINT16(?ELLIPTIC_CURVES_EXT), ?UINT16(Len),
 		       ExtData:Len/binary, Rest/binary>>, Version, MessageType, Acc)

@@ -185,6 +185,7 @@
           session_tickets            => {disabled,     [versions]},
           signature_algs             => {undefined, [versions]},
           signature_algs_cert        => {undefined, [versions]},
+          srtp_profiles              => {undefined, [versions]},
           sni_fun                    => {undefined, [versions,
                                                      sni_hosts]},
           sni_hosts                  => {[],        [versions]},

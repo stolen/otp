@@ -1804,6 +1804,12 @@ handle_option(signature_algs_cert = Option, unbound, #{versions := [HighestVersi
 handle_option(signature_algs_cert = Option, Value0, #{versions := [HighestVersion|_]} = OptionsMap, _Env) ->
     Value = handle_signature_algorithms_option(Value0, tls_version(HighestVersion)),
     OptionsMap#{Option => Value};
+handle_option(srtp_profiles = Option, unbound, OptionsMap, #{rules := Rules}) ->
+    Value = default_value(Option, Rules),
+    OptionsMap#{Option => Value};
+handle_option(srtp_profiles = Option, Value0, OptionsMap, _Env) ->
+    Value = validate_option(Option, Value0),
+    OptionsMap#{Option => Value};
 handle_option(sni_fun = Option, unbound, OptionsMap, #{rules := Rules}) ->
     Value = default_value(Option, Rules),
     OptionsMap#{Option => Value};
@@ -2342,6 +2348,14 @@ validate_option(session_tickets, Value, client) ->
            {options, role,
             {session_tickets,
              {Value, {client, [disabled, manual, auto]}}}}});
+validate_option(srtp_profiles = Opt, Values, _) when is_list(Values), length(Values) > 0 ->
+    IsValidProfile = fun(<<_, _>>) -> true; (_) -> false end,
+    case lists:all(IsValidProfile, Values) of
+        true ->
+            Values;
+        false ->
+            throw({error, {options, {Opt, Values}}})
+    end;
 validate_option(sni_fun, undefined, _) ->
     undefined;
 validate_option(sni_fun, Fun, _)
